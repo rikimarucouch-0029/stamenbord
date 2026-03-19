@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>スタメン決め</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Segoe UI", sans-serif;
+  background: #1a1a2e;
+  color: #fff;
+  -webkit-tap-highlight-color: transparent;
+}
+.app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; }
+
+/* ========== ツールバー ========== */
+.toolbar {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+  background: #16213e; flex-shrink: 0; flex-wrap: wrap;
+}
+.toolbar select, .toolbar button {
+  padding: 6px 12px; border: 1.5px solid rgba(255,255,255,.2); border-radius: 6px;
+  background: rgba(255,255,255,.08); color: rgba(255,255,255,.85);
+  font-size: .75rem; font-weight: 600; cursor: pointer; font-family: inherit;
+  min-height: 36px; transition: all .12s;
+}
+.toolbar select { max-width: 180px; }
+.toolbar select option { background: #16213e; color: #fff; }
+.toolbar button:active { transform: scale(.95); opacity: .8; }
+.toolbar .spacer { flex: 1; }
+.page-title { font-size: .9rem; font-weight: 700; color: #fff; letter-spacing: .5px; }
+
+/* ========== タブ ========== */
+.tabs {
+  display: flex; background: #16213e; border-top: 1px solid rgba(255,255,255,.08); flex-shrink: 0;
+}
+.tab {
+  flex: 1; padding: 10px; border: none; background: transparent;
+  color: rgba(255,255,255,.4); font-size: .82rem; font-weight: 600;
+  cursor: pointer; border-bottom: 3px solid transparent; font-family: inherit;
+}
+.tab.active { color: #fff; border-bottom-color: #e94560; background: rgba(255,255,255,.04); }
+
+/* ========== コンテンツ ========== */
+.content { flex: 1; overflow: hidden; }
+.page { display: none; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.page.active { display: block; }
+
+/* ========== オーダー表 ========== */
+.order-page { padding: 10px; }
+.lineup-table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,.06); border-radius: 8px; overflow: hidden; }
+.lineup-table th {
+  background: #0f3460; color: rgba(255,255,255,.9); padding: 8px 4px;
+  font-size: .7rem; font-weight: 600; text-align: center;
+}
+.lineup-table td {
+  padding: 4px; border-bottom: 1px solid rgba(255,255,255,.08); text-align: center; vertical-align: middle;
+}
+.lineup-table tr:last-child td { border-bottom: none; }
+.bat-num {
+  font-size: 1rem; font-weight: 800; color: #e94560; width: 30px;
+}
+.pos-select {
+  width: 100%; padding: 5px 2px; border: 1px solid rgba(255,255,255,.15); border-radius: 4px;
+  background: rgba(255,255,255,.08); color: #fff; font-size: .78rem; font-family: inherit;
+  text-align: center; cursor: pointer;
+}
+.pos-select option { background: #1a1a2e; }
+.player-cell {
+  display: flex; align-items: center; gap: 6px; padding: 2px 4px; min-height: 36px;
+  cursor: pointer; border-radius: 4px; transition: background .1s;
+}
+.player-cell:hover { background: rgba(255,255,255,.1); }
+.player-cell .num { font-size: .85rem; font-weight: 800; min-width: 24px; text-align: center; color: #ffd54f; }
+.player-cell .name { font-size: .78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-cell.empty { color: rgba(255,255,255,.3); font-size: .72rem; font-style: italic; }
+.remove-btn {
+  width: 24px; height: 24px; border: none; background: rgba(239,83,80,.2); color: #ef5350;
+  border-radius: 4px; cursor: pointer; font-size: .8rem; font-weight: 700; line-height: 1;
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+}
+.remove-btn:hover { background: rgba(239,83,80,.4); }
+
+/* ========== 控え ========== */
+.section-title {
+  font-size: .8rem; font-weight: 700; color: rgba(255,255,255,.7);
+  padding: 12px 0 6px; border-top: 1px solid rgba(255,255,255,.1); margin-top: 12px;
+}
+.bench-area {
+  display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0;
+}
+.bench-chip {
+  display: flex; align-items: center; gap: 4px; padding: 4px 10px;
+  background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12);
+  border-radius: 16px; font-size: .72rem; cursor: pointer; transition: all .1s;
+}
+.bench-chip:hover { background: rgba(255,255,255,.18); }
+.bench-chip .num { font-weight: 800; color: #81d4fa; }
+.bench-chip .name { font-weight: 600; }
+.bench-chip .rm { margin-left: 4px; color: rgba(255,255,255,.3); font-weight: 700; }
+.bench-chip .rm:hover { color: #ef5350; }
+
+/* ========== フィールド ========== */
+.field-page { display: flex; flex-direction: column; align-items: center; padding: 10px; }
+.field-container { position: relative; width: 100%; max-width: 400px; aspect-ratio: 1/1.05; }
+.field-canvas { width: 100%; height: 100%; }
+.field-legend {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+  padding: 8px; font-size: .68rem; color: rgba(255,255,255,.6);
+}
+
+/* ========== 継投 ========== */
+.relay-page { padding: 10px; }
+.relay-table { width: 100%; border-collapse: collapse; background: rgba(255,255,255,.06); border-radius: 8px; overflow: hidden; }
+.relay-table th {
+  background: #0f3460; color: rgba(255,255,255,.9); padding: 8px 6px;
+  font-size: .72rem; font-weight: 600; text-align: center;
+}
+.relay-table td {
+  padding: 6px 4px; border-bottom: 1px solid rgba(255,255,255,.08);
+  text-align: center; font-size: .78rem;
+}
+.relay-table .inning-num { font-weight: 800; color: #4fc3f7; width: 40px; }
+.relay-player-cell {
+  cursor: pointer; padding: 6px 8px; border-radius: 4px; min-height: 34px;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+}
+.relay-player-cell:hover { background: rgba(255,255,255,.1); }
+.relay-player-cell.empty { color: rgba(255,255,255,.3); font-style: italic; font-size: .7rem; }
+.relay-player-cell .num { font-weight: 800; color: #ffd54f; }
+.relay-player-cell .name { font-weight: 600; }
+.relay-add-row {
+  display: block; width: 100%; margin-top: 8px; padding: 8px;
+  border: 1.5px dashed rgba(255,255,255,.2); border-radius: 6px;
+  background: transparent; color: rgba(255,255,255,.4); font-size: .75rem;
+  cursor: pointer; font-family: inherit; text-align: center;
+}
+.relay-add-row:hover { color: rgba(255,255,255,.7); border-color: rgba(255,255,255,.4); }
+
+/* ========== 選手ピッカー ========== */
+.picker-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  z-index: 100; align-items: flex-end; justify-content: center;
+}
+.picker-overlay.show { display: flex; }
+.picker-sheet {
+  width: 100%; max-width: 500px; max-height: 70vh;
+  background: #1e2a4a; border-radius: 16px 16px 0 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.picker-header {
+  display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.1);
+}
+.picker-header input {
+  flex: 1; padding: 8px 12px; border: 1px solid rgba(255,255,255,.15);
+  border-radius: 8px; background: rgba(255,255,255,.08); color: #fff;
+  font-size: .82rem; font-family: inherit; outline: none;
+}
+.picker-header input::placeholder { color: rgba(255,255,255,.3); }
+.picker-close {
+  padding: 6px 12px; border: none; background: rgba(255,255,255,.1);
+  color: #fff; border-radius: 6px; font-size: .8rem; cursor: pointer; font-family: inherit;
+}
+.picker-confirm {
+  padding: 6px 14px; border: none; background: #4caf50;
+  color: #fff; border-radius: 6px; font-size: .8rem; font-weight: 700; cursor: pointer; font-family: inherit;
+  display: none;
+}
+.picker-confirm.show { display: inline-block; }
+.picker-slot-info {
+  font-size: .72rem; color: #4fc3f7; font-weight: 600; white-space: nowrap;
+}
+.picker-body { flex: 1; overflow-y: auto; padding: 8px; -webkit-overflow-scrolling: touch; }
+.picker-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-radius: 6px; cursor: pointer; transition: background .1s;
+}
+.picker-item:hover { background: rgba(255,255,255,.1); }
+.picker-item.used { opacity: .3; pointer-events: none; }
+.picker-item.selected { background: rgba(76,175,80,.25); border: 1.5px solid #4caf50; }
+.picker-item .num { font-size: .9rem; font-weight: 800; min-width: 28px; text-align: center; color: #ffd54f; }
+.picker-item .name { font-size: .82rem; font-weight: 600; }
+.picker-item .tag { font-size: .6rem; color: rgba(255,255,255,.4); margin-left: auto; }
+.picker-item .check { margin-left: auto; font-size: .9rem; color: #4caf50; display: none; }
+.picker-item.selected .check { display: inline; }
+.picker-none {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-radius: 6px; cursor: pointer; color: rgba(255,255,255,.5);
+  font-size: .78rem; border: 1px dashed rgba(255,255,255,.2);
+  margin-bottom: 8px;
+}
+.picker-none:hover { background: rgba(255,255,255,.08); }
+
+/* grade colors */
+.grade-3 { border-left: 3px solid #e94560; }
+.grade-2 { border-left: 3px solid #2196f3; }
+.grade-1 { border-left: 3px solid #4caf50; }
+.grade-cap { border-left: 3px solid #ff9800; }
+
+/* ========== ドラッグ&ドロップ ========== */
+.drag-ghost {
+  position: fixed; z-index: 200; pointer-events: none;
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; border-radius: 8px;
+  background: rgba(233,69,96,.85); color: #fff;
+  font-size: .78rem; font-weight: 700;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+.drag-ghost .num { font-weight: 800; }
+.lineup-table tr.drop-hover td {
+  background: rgba(76,175,80,.25) !important;
+}
+.bench-area.drop-hover {
+  background: rgba(76,175,80,.15);
+  outline: 2px dashed #4caf50;
+  border-radius: 8px;
+}
+[data-draggable] { touch-action: none; cursor: grab; }
+[data-draggable]:active { cursor: grabbing; }
+
+/* ========== エクスポート ========== */
+.export-popup {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7);
+  z-index: 100; align-items: center; justify-content: center;
+}
+.export-popup.show { display: flex; }
+.export-box {
+  width: 90%; max-width: 400px; background: #1e2a4a; border-radius: 12px; padding: 16px;
+}
+.export-box textarea {
+  width: 100%; height: 200px; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.15);
+  border-radius: 8px; color: #fff; font-family: monospace; font-size: .72rem; padding: 8px; resize: none;
+}
+.export-box .btns { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+.export-box button {
+  padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+  font-size: .78rem; font-weight: 600; font-family: inherit;
+}
+.export-box .copy-btn { background: #e94560; color: #fff; }
+.export-box .close-btn { background: rgba(255,255,255,.15); color: #fff; }
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ツールバー -->
+  <div class="toolbar">
+    <span class="page-title">スタメン決め</span>
+    <div class="spacer"></div>
+    <select id="teamSelect" onchange="onTeamChange()"></select>
+    <button onclick="exportLineup()">📋</button>
+    <button onclick="saveData()">💾</button>
+  </div>
+
+  <!-- タブ -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('order')">オーダー</button>
+    <button class="tab" onclick="switchTab('field')">フィールド</button>
+    <button class="tab" onclick="switchTab('relay')">継投</button>
+  </div>
+
+  <!-- コンテンツ -->
+  <div class="content">
+    <!-- オーダー表 -->
+    <div id="pageOrder" class="page order-page active"></div>
+    <!-- フィールド -->
+    <div id="pageField" class="page field-page">
+      <div class="field-container">
+        <canvas id="fieldCanvas" class="field-canvas"></canvas>
+      </div>
+      <div class="field-legend" id="fieldLegend"></div>
+    </div>
+    <!-- 継投 -->
+    <div id="pageRelay" class="page relay-page"></div>
+  </div>
+</div>
+
+<!-- 選手ピッカー -->
+<div class="picker-overlay" id="pickerOverlay">
+  <div class="picker-sheet">
+    <div class="picker-header">
+      <span class="picker-slot-info" id="pickerSlotInfo"></span>
+      <input type="text" id="pickerSearch" placeholder="名前で検索..." oninput="filterPicker()">
+      <button class="picker-confirm" id="pickerConfirm" onclick="confirmPicker()">決定</button>
+      <button class="picker-close" onclick="closePicker()">閉じる</button>
+    </div>
+    <div class="picker-body" id="pickerBody"></div>
+  </div>
+</div>
+
+<!-- エクスポート -->
+<div class="export-popup" id="exportPopup">
+  <div class="export-box">
+    <textarea id="exportText" readonly></textarea>
+    <div class="btns">
+      <button class="close-btn" onclick="closeExport()">閉じる</button>
+      <button class="copy-btn" onclick="copyExport()">コピー</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==========================================================
+//  名簿データ
+// ==========================================================
+const ROSTER = [
+  {
+    tournament: '全日本少年予選＆大田区大会',
+    teams: [
+      {
+        name: '全日本少年予選', color: '#e94560',
+        staff: [{n:30,name:'細田 忠宏'},{n:29,name:'高橋 亨'},{n:28,name:'小暮 友朗'}],
+        players: [
+          {n:10,name:'永島 大雅'},{n:1,name:'後藤 駿太'},{n:2,name:'越川 颯翔'},
+          {n:3,name:'高橋 和大'},{n:4,name:'柏 結斗'},{n:5,name:'芹ヶ野 雄眞'},
+          {n:6,name:'田村 美裕'},{n:7,name:'有川 湊真'},{n:8,name:'芦名 一郎'},
+          {n:9,name:'佐伯 遥斗'},{n:11,name:'池畠 瑛士'},{n:12,name:'澤田 一輝'},
+          {n:13,name:'袴田 蓮季'},{n:14,name:'坂本 大芽'},{n:15,name:'齋藤 大輝'},
+          {n:20,name:'中里 琥珀'},{n:24,name:'吉野 琉生'},{n:26,name:'原 信太朗'},
+          {n:32,name:'西田 智貴'},{n:40,name:'渡邊 来輝'},{n:43,name:'矢澤 直大'},
+          {n:44,name:'石野 華偉'},{n:45,name:'酒巻 然'},{n:49,name:'谷川 新太'},
+          {n:50,name:'葉 展銓'},
+        ]
+      },
+      {
+        name: '大田区A', color: '#2196f3',
+        staff: [{n:30,name:'高橋 亨'},{n:29,name:'永島 正人'},{n:28,name:'芹ヶ野 碓完'}],
+        players: [
+          {n:10,name:'永島 大雅'},{n:1,name:'後藤 駿太'},{n:2,name:'越川 颯翔'},
+          {n:3,name:'高橋 和大'},{n:4,name:'柏 結斗'},{n:5,name:'芹ヶ野 雄眞'},
+          {n:6,name:'田村 美裕'},{n:7,name:'有川 湊真'},{n:8,name:'芦名 一郎'},
+          {n:9,name:'佐伯 遥斗'},{n:11,name:'池畠 瑛士'},{n:12,name:'澤田 一輝'},
+          {n:13,name:'袴田 蓮季'},{n:14,name:'坂本 大芽'},{n:15,name:'齋藤 大輝'},
+          {n:24,name:'吉野 琉生'},{n:41,name:'戸田 悠斗'},{n:49,name:'谷川 新太'},
+        ]
+      },
+      {
+        name: '大田区B', color: '#4caf50',
+        staff: [{n:30,name:'小暮 友朗'},{n:29,name:'内田 智弘'},{n:28,name:'戸田 陽介'}],
+        players: [
+          {n:10,name:'原 信太朗'},{n:19,name:'山本 悠陽'},{n:20,name:'中里 琥珀'},
+          {n:25,name:'吉野 羽琉'},{n:32,name:'西田 智貴'},{n:33,name:'小野島 颯汰'},
+          {n:35,name:'上野 遥斗'},{n:37,name:'綾部 稜大'},{n:40,name:'渡邊 来輝'},
+          {n:43,name:'矢澤 直大'},{n:44,name:'石野 華偉'},{n:45,name:'酒巻 然'},
+          {n:48,name:'島津 陽仁'},{n:50,name:'葉 展銓'},{n:52,name:'宇井 悠葵'},
+          {n:53,name:'紙谷 亜輝'},{n:54,name:'國生 陵太'},{n:58,name:'戸田 隆介'},
+          {n:61,name:'渕山 新'},{n:64,name:'柏 敦斗'},{n:66,name:'赤坂 笑太郎'},
+          {n:67,name:'川野 颯己'},{n:69,name:'山道 湊祐'},
+        ]
+      },
+      {
+        name: '大田区C', color: '#ff9800',
+        staff: [{n:30,name:'脇本 力丸'},{n:29,name:'山本 忠規'},{n:28,name:'國生 大輔'}],
+        players: [
+          {n:10,name:'加藤 航士'},{n:17,name:'村田 響'},{n:18,name:'菅家 峻馬'},{n:22,name:'南雲 陽向'},
+          {n:23,name:'袴田 心季'},{n:27,name:'三上 航'},{n:31,name:'中村 裕惺'},
+          {n:34,name:'王 新鋭'},{n:36,name:'秋元 悠佑'},{n:38,name:'尾上 大雅'},
+          {n:42,name:'平井 湊大'},{n:46,name:'島田 晴翔'},{n:47,name:'渡邊 悠生'},
+          {n:51,name:'西尾 歩'},{n:55,name:'淺沼 龍之介'},{n:56,name:'梅村 悠希'},
+          {n:57,name:'尾上 友紀'},{n:59,name:'仲井眞 海偉'},{n:60,name:'仲井眞 波琉'},
+          {n:62,name:'神田 橙磨'},{n:63,name:'尾崎 進太郎'},{n:65,name:'金子 新'},
+          {n:68,name:'土佐 大聖'},{n:70,name:'鹿島 鳳毅'},
+        ]
+      },
+    ]
+  },
+  {
+    tournament: '城南年間大会',
+    teams: [
+      {
+        name: '城南A', color: '#e94560',
+        staff: [{n:30,name:'高橋 亨'},{n:29,name:'永島 正人'},{n:28,name:'細田 忠宏'}],
+        players: [
+          {n:10,name:'永島 大雅'},{n:1,name:'後藤 駿太'},{n:2,name:'越川 颯翔'},
+          {n:3,name:'高橋 和大'},{n:4,name:'柏 結斗'},{n:5,name:'芹ヶ野 雄眞'},
+          {n:6,name:'田村 美裕'},{n:7,name:'有川 湊真'},{n:8,name:'芦名 一郎'},
+          {n:9,name:'佐伯 遥斗'},{n:11,name:'池畠 瑛士'},{n:12,name:'澤田 一輝'},
+          {n:13,name:'袴田 蓮季'},{n:14,name:'坂本 大芽'},{n:15,name:'齋藤 大輝'},
+        ]
+      },
+      {
+        name: '城南B', color: '#2196f3',
+        staff: [{n:30,name:'小暮 友朗'},{n:29,name:'國生 大輔'},{n:28,name:'芹ヶ野 碓完'}],
+        players: [
+          {n:10,name:'原 信太朗'},{n:20,name:'中里 琥珀'},{n:24,name:'吉野 琉生'},
+          {n:33,name:'小野島 颯汰'},{n:37,name:'綾部 稜大'},{n:39,name:'田中 千太'},
+          {n:40,name:'渡邊 来輝'},{n:43,name:'矢澤 直大'},{n:44,name:'石野 華偉'},
+          {n:45,name:'酒巻 然'},{n:49,name:'谷川 新太'},{n:50,name:'葉 展銓'},
+          {n:52,name:'宇井 悠葵'},{n:53,name:'紙谷 亜輝'},{n:54,name:'國生 陵太'},
+          {n:71,name:'添野 泰那'},{n:72,name:'金岩 航輝'},
+        ]
+      },
+      {
+        name: '城南C', color: '#4caf50',
+        staff: [{n:30,name:'脇本 力丸'},{n:29,name:'戸田 陽介'},{n:28,name:'山本 忠規'}],
+        players: [
+          {n:10,name:'西田 智貴'},{n:19,name:'山本 悠陽'},{n:21,name:'加藤 航士'},
+          {n:23,name:'袴田 心季'},{n:25,name:'吉野 羽琉'},{n:27,name:'三上 航'},
+          {n:34,name:'王 新鋭'},{n:35,name:'上野 遥斗'},{n:41,name:'戸田 悠斗'},
+          {n:42,name:'平井 湊大'},{n:47,name:'渡邊 悠生'},{n:48,name:'島津 陽仁'},
+          {n:59,name:'仲井眞 海偉'},{n:62,name:'神田 橙磨'},{n:63,name:'尾崎 進太郎'},
+          {n:64,name:'柏 敦斗'},{n:66,name:'赤坂 笑太郎'},{n:67,name:'川野 颯己'},
+        ]
+      },
+      {
+        name: '城南D', color: '#ff9800',
+        staff: [{n:30,name:'内田 智弘'},{n:29,name:'脇本 武蔵'},{n:28,name:'増山 幸二'}],
+        players: [
+          {n:10,name:'菅家 峻馬'},{n:16,name:'原田 海里'},{n:17,name:'村田 響'},
+          {n:22,name:'南雲 陽向'},{n:31,name:'中村 裕惺'},{n:36,name:'秋元 悠佑'},
+          {n:38,name:'尾上 大雅'},{n:46,name:'島田 晴翔'},{n:51,name:'西尾 歩'},
+          {n:55,name:'淺沼 龍之介'},{n:56,name:'梅村 悠希'},{n:57,name:'尾上 友紀'},
+          {n:58,name:'戸田 隆介'},{n:60,name:'仲井眞 波琉'},{n:61,name:'渕山 新'},
+          {n:65,name:'金子 新'},{n:68,name:'土佐 大聖'},{n:70,name:'鹿島 鳳毅'},
+          {n:73,name:'雨下 遥'},
+        ]
+      },
+      {
+        name: '城南E（1年リーグ）', color: '#00bcd4',
+        staff: [{n:30,name:'脇本 力丸'},{n:29,name:'脇本 武蔵'},{n:28,name:'小暮 友朗'}],
+        players: [
+          {n:10,name:'戸田 隆介'},{n:55,name:'淺沼 龍之介'},{n:56,name:'梅村 悠希'},
+          {n:57,name:'尾上 友紀'},{n:59,name:'仲井眞 海偉'},{n:60,name:'仲井眞 波琉'},
+          {n:61,name:'渕山 新'},{n:62,name:'神田 橙磨'},{n:63,name:'尾崎 進太郎'},
+          {n:64,name:'柏 敦斗'},{n:65,name:'金子 新'},{n:66,name:'赤坂 笑太郎'},
+          {n:67,name:'川野 颯己'},{n:68,name:'土佐 大聖'},{n:70,name:'鹿島 鳳毅'},
+          {n:71,name:'添野 泰那'},{n:72,name:'金岩 航輝'},{n:73,name:'雨下 遥'},
+          {n:74,name:'島田 樹'},{n:75,name:'島田 秀一'},
+          {n:76,name:'今野 咲陽'},{n:77,name:'古川 眞稀'},
+        ]
+      },
+    ]
+  },
+];
+
+// ==========================================================
+//  定数
+// ==========================================================
+const POS_LIST = ['投','捕','一','二','三','遊','左','中','右'];
+const POS_EN   = ['P','C','1B','2B','3B','SS','LF','CF','RF'];
+const POS_COLORS = {
+  P:'#1565C0', C:'#1565C0',
+  '1B':'#2E7D32','2B':'#2E7D32','3B':'#2E7D32', SS:'#2E7D32',
+  LF:'#E65100', CF:'#E65100', RF:'#E65100'
+};
+const SK = 'lineup-maker-v1';
+
+// ==========================================================
+//  状態
+// ==========================================================
+let allTeams = [];
+let currentTeamIdx = 0;
+// lineup[0..8] = { n, name } or null  (打順1~9)
+// lineupPos[0..8] = POS_EN index (0=P..8=RF)
+let lineup = Array(9).fill(null);
+let lineupPos = [0,1,2,3,4,5,6,7,8]; // default
+let bench = []; // [{n, name}]
+let relay = []; // [{inning:'1', player:{n,name}}]
+let pickerCallback = null;
+
+// ==========================================================
+//  初期化
+// ==========================================================
+function init() {
+  // チームリスト構築
+  ROSTER.forEach(t => t.teams.forEach(tm => allTeams.push({ tournament: t.tournament, ...tm })));
+  const sel = document.getElementById('teamSelect');
+  allTeams.forEach((t, i) => {
+    const o = document.createElement('option');
+    o.value = i;
+    o.textContent = t.name;
+    sel.appendChild(o);
+  });
+  loadData();
+  renderAll();
+}
+
+function onTeamChange() {
+  const idx = +document.getElementById('teamSelect').value;
+  if (idx !== currentTeamIdx) {
+    currentTeamIdx = idx;
+    lineup = Array(9).fill(null);
+    lineupPos = [0,1,2,3,4,5,6,7,8];
+    bench = [];
+    relay = [];
+    renderAll();
+  }
+}
+
+function getTeam() { return allTeams[currentTeamIdx]; }
+function getPlayers() { return getTeam().players; }
+
+// 使用済み選手(lineup + bench + relay)
+function usedPlayerKeys() {
+  const keys = new Set();
+  lineup.forEach(p => { if (p) keys.add(p.n + ':' + p.name); });
+  bench.forEach(p => keys.add(p.n + ':' + p.name));
+  relay.forEach(r => { if (r.player) keys.add(r.player.n + ':' + r.player.name); });
+  return keys;
+}
+// ピッカー用：選択先に応じて「選べない」選手を返す（控えは除外しない）
+function pickerUsedKeys(target) {
+  const keys = new Set();
+  lineup.forEach(p => { if (p) keys.add(p.n + ':' + p.name); });
+  if (target !== 'lineup' && target !== 'relay') {
+    bench.forEach(p => keys.add(p.n + ':' + p.name));
+  }
+  relay.forEach(r => { if (r.player) keys.add(r.player.n + ':' + r.player.name); });
+  return keys;
+}
+// 控えから該当選手を除去
+function removeFromBench(player) {
+  const key = player.n + ':' + player.name;
+  const idx = bench.findIndex(p => p.n + ':' + p.name === key);
+  if (idx >= 0) bench.splice(idx, 1);
+}
+
+function gradeOf(n) {
+  if (n === 10) return 'cap';
+  if (n >= 1 && n <= 15) return '3';
+  if (n >= 16 && n <= 54) return '2';
+  return '1';
+}
+
+// ==========================================================
+//  タブ
+// ==========================================================
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const pages = ['order','field','relay'];
+    t.classList.toggle('active', pages[i] === name);
+  });
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page' + name.charAt(0).toUpperCase() + name.slice(1)).classList.add('active');
+  if (name === 'field') setTimeout(() => drawField(), 50);
+}
+
+// ==========================================================
+//  レンダリング
+// ==========================================================
+function renderAll() {
+  renderOrder();
+  renderRelay();
+  drawField();
+}
+
+function renderOrder() {
+  const page = document.getElementById('pageOrder');
+  const used = usedPlayerKeys();
+
+  let html = '<table class="lineup-table"><thead><tr>';
+  html += '<th>打順</th><th>守備</th><th>選手</th><th></th>';
+  html += '</tr></thead><tbody>';
+
+  for (let i = 0; i < 9; i++) {
+    const p = lineup[i];
+    const posIdx = lineupPos[i];
+    html += `<tr data-drop="lineup" data-drop-idx="${i}">`;
+    html += `<td class="bat-num">${i + 1}</td>`;
+    // 守備位置セレクト
+    html += '<td><select class="pos-select" onchange="changePos(' + i + ', this.value)">';
+    POS_LIST.forEach((pos, pi) => {
+      html += `<option value="${pi}" ${pi === posIdx ? 'selected' : ''}>${pos}</option>`;
+    });
+    html += '</select></td>';
+    // 選手
+    if (p) {
+      html += `<td><div class="player-cell" data-draggable data-src="lineup" data-src-idx="${i}" data-n="${p.n}" data-name="${p.name}" onclick="openPickerFor('lineup',${i})">`;
+      html += `<span class="num">${p.n}</span><span class="name">${p.name}</span>`;
+      html += '</div></td>';
+      html += `<td><button class="remove-btn" onclick="removeLineup(${i})">×</button></td>`;
+    } else {
+      html += `<td><div class="player-cell empty" onclick="openPickerFor('lineup',${i})">選手を選択...</div></td>`;
+      html += '<td></td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+
+  // 控え
+  html += '<div class="section-title">控え選手</div>';
+  html += '<div class="bench-area" data-drop="bench">';
+  bench.forEach((p, i) => {
+    html += `<div class="bench-chip grade-${gradeOf(p.n)}" data-draggable data-src="bench" data-src-idx="${i}" data-n="${p.n}" data-name="${p.name}">`;
+    html += `<span class="num">${p.n}</span><span class="name">${p.name}</span>`;
+    html += `<span class="rm" onclick="event.stopPropagation();removeBench(${i})">×</span>`;
+    html += '</div>';
+  });
+  html += `<div class="bench-chip" onclick="openPickerFor('bench')" style="border-style:dashed;color:rgba(255,255,255,.4)">+ 追加</div>`;
+  html += `<div class="bench-chip" onclick="openManualAdd()" style="border-style:dashed;color:rgba(255,255,255,.4)">✏️ 手動追加</div>`;
+  html += '</div>';
+
+  // 未選出メンバー
+  const team = getTeam();
+  const unselected = team.players.filter(p => !used.has(p.n + ':' + p.name));
+  if (unselected.length > 0) {
+    html += '<div class="section-title">未選出（' + unselected.length + '人）</div>';
+    html += '<div class="bench-area">';
+    unselected.forEach(p => {
+      html += `<div class="bench-chip grade-${gradeOf(p.n)}" data-draggable data-src="unselected" data-n="${p.n}" data-name="${p.name}" style="opacity:.7">`;
+      html += `<span class="num">${p.n}</span><span class="name">${p.name}</span>`;
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  page.innerHTML = html;
+}
+
+function changePos(idx, val) {
+  lineupPos[idx] = +val;
+  drawField();
+}
+
+function removeLineup(idx) {
+  lineup[idx] = null;
+  renderAll();
+  autoSave();
+}
+
+function removeBench(idx) {
+  bench.splice(idx, 1);
+  renderAll();
+  autoSave();
+}
+
+// ==========================================================
+//  継投
+// ==========================================================
+function renderRelay() {
+  const page = document.getElementById('pageRelay');
+  let html = '<table class="relay-table"><thead><tr>';
+  html += '<th>回</th><th>投手</th><th></th>';
+  html += '</tr></thead><tbody>';
+
+  if (relay.length === 0) {
+    // デフォルトで1回から
+    relay.push({ inning: '1', player: null });
+  }
+
+  relay.forEach((r, i) => {
+    html += '<tr>';
+    html += `<td class="inning-num"><input type="text" value="${r.inning}" style="width:36px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:4px;color:#4fc3f7;text-align:center;font-weight:800;font-size:.82rem;padding:4px;font-family:inherit;" onchange="changeRelayInning(${i},this.value)"></td>`;
+    if (r.player) {
+      html += `<td><div class="relay-player-cell" onclick="openPickerFor('relay',${i})">`;
+      html += `<span class="num">${r.player.n}</span><span class="name">${r.player.name}</span>`;
+      html += '</div></td>';
+    } else {
+      html += `<td><div class="relay-player-cell empty" onclick="openPickerFor('relay',${i})">投手を選択...</div></td>`;
+    }
+    html += `<td><button class="remove-btn" onclick="removeRelay(${i})">×</button></td>`;
+    html += '</tr>';
+  });
+
+  html += '</tbody></table>';
+  html += '<button class="relay-add-row" onclick="addRelay()">+ イニング追加</button>';
+  page.innerHTML = html;
+}
+
+function addRelay() {
+  const last = relay.length > 0 ? relay[relay.length - 1] : null;
+  const nextInning = last ? String(parseInt(last.inning) + 1 || relay.length + 1) : '1';
+  relay.push({ inning: nextInning, player: null });
+  renderRelay();
+}
+
+function removeRelay(idx) {
+  relay.splice(idx, 1);
+  renderRelay();
+  autoSave();
+}
+
+function changeRelayInning(idx, val) {
+  relay[idx].inning = val;
+  autoSave();
+}
+
+// ==========================================================
+//  選手ピッカー（複数選択対応）
+// ==========================================================
+let pickerSelected = []; // 複数選択用 [{n, name}]
+
+function openPickerFor(target, idx) {
+  pickerCallback = { target, idx };
+  pickerSelected = [];
+  const overlay = document.getElementById('pickerOverlay');
+  overlay.classList.add('show');
+  document.getElementById('pickerSearch').value = '';
+  updatePickerUI();
+  renderPicker();
+  setTimeout(() => document.getElementById('pickerSearch').focus(), 100);
+}
+
+function closePicker() {
+  document.getElementById('pickerOverlay').classList.remove('show');
+  pickerCallback = null;
+  pickerSelected = [];
+}
+
+function updatePickerUI() {
+  if (!pickerCallback) return;
+  const { target, idx } = pickerCallback;
+  const info = document.getElementById('pickerSlotInfo');
+  const confirm = document.getElementById('pickerConfirm');
+
+  if (target === 'lineup') {
+    const slotNum = idx + 1;
+    info.textContent = slotNum + '番';
+    confirm.classList.remove('show');
+  } else if (target === 'bench') {
+    info.textContent = '控え追加';
+    confirm.classList.toggle('show', pickerSelected.length > 0);
+    confirm.textContent = pickerSelected.length > 0 ? `決定（${pickerSelected.length}人）` : '決定';
+  } else if (target === 'relay') {
+    info.textContent = relay[idx].inning + '回〜';
+    confirm.classList.remove('show');
+  }
+}
+
+function filterPicker() { renderPicker(); }
+
+function renderPicker() {
+  const body = document.getElementById('pickerBody');
+  const search = document.getElementById('pickerSearch').value.trim();
+  const { target } = pickerCallback || {};
+  const used = pickerUsedKeys(target);
+  const benchKeys = new Set(bench.map(p => p.n + ':' + p.name));
+  const players = getPlayers();
+  const selKeys = new Set(pickerSelected.map(p => p.n + ':' + p.name));
+
+  let html = '';
+  // lineup/relay は「空にする」を表示
+  if (target === 'lineup' || target === 'relay') {
+    html += '<div class="picker-none" onclick="pickPlayer(null)">— 空にする —</div>';
+  }
+
+  players.forEach(p => {
+    const key = p.n + ':' + p.name;
+    const isUsed = used.has(key);
+    const isBench = benchKeys.has(key);
+    const isSel = selKeys.has(key);
+    if (search && !p.name.includes(search) && !String(p.n).includes(search)) return;
+    const g = gradeOf(p.n);
+    const cls = [
+      'picker-item',
+      'grade-' + g,
+      isUsed && !isSel ? 'used' : '',
+      isSel ? 'selected' : ''
+    ].filter(Boolean).join(' ');
+    html += `<div class="${cls}" onclick="pickPlayer({n:${p.n},name:'${p.name.replace(/'/g, "\\'")}'})">`;
+    html += `<span class="num">${p.n}</span><span class="name">${p.name}</span>`;
+    if (isUsed && !isSel) html += '<span class="tag">選出済</span>';
+    else if (isBench && !isSel && (target === 'lineup' || target === 'relay')) html += '<span class="tag" style="color:#81d4fa">控え</span>';
+    html += '<span class="check">✓</span>';
+    html += '</div>';
+  });
+
+  // 他チームの選手
+  const currentTeamName = getTeam().name;
+  const otherPlayers = [];
+  allTeams.forEach(t => {
+    if (t.name === currentTeamName) return;
+    t.players.forEach(p => {
+      // 自チームに同じ選手がいたらスキップ
+      if (players.some(cp => cp.n === p.n && cp.name === p.name)) return;
+      if (otherPlayers.some(op => op.n === p.n && op.name === p.name)) return;
+      otherPlayers.push({ ...p, team: t.name });
+    });
+  });
+
+  const filteredOther = otherPlayers.filter(p =>
+    !search || p.name.includes(search) || String(p.n).includes(search) || p.team.includes(search)
+  );
+  if (filteredOther.length > 0) {
+    html += '<div style="padding:8px 4px 4px;font-size:.68rem;color:rgba(255,255,255,.35);font-weight:600;border-top:1px solid rgba(255,255,255,.08);margin-top:6px;">他チーム</div>';
+    filteredOther.forEach(p => {
+      const key = p.n + ':' + p.name;
+      const isUsed = used.has(key);
+      const isSel = selKeys.has(key);
+      const g = gradeOf(p.n);
+      const cls = [
+        'picker-item',
+        'grade-' + g,
+        isUsed && !isSel ? 'used' : '',
+        isSel ? 'selected' : ''
+      ].filter(Boolean).join(' ');
+      html += `<div class="${cls}" onclick="pickPlayer({n:${p.n},name:'${p.name.replace(/'/g, "\\'")}'})">`;
+      html += `<span class="num">${p.n}</span><span class="name">${p.name}</span>`;
+      html += `<span class="tag" style="color:#ff9800">${p.team}</span>`;
+      html += '<span class="check">✓</span>';
+      html += '</div>';
+    });
+  }
+
+  // 手動追加ボタン
+  html += '<div class="picker-none" onclick="openManualAdd()" style="margin-top:8px;">✏️ 背番号・名前を入力して追加</div>';
+
+  body.innerHTML = html;
+}
+
+function pickPlayer(player) {
+  if (!pickerCallback) return;
+  const { target, idx } = pickerCallback;
+
+  if (target === 'lineup') {
+    // 即時割当 → 控えにいたら自動除去 → 次の空き枠へ自動進行
+    if (player) removeFromBench(player);
+    lineup[idx] = player;
+    autoSave();
+    renderAll();
+    if (player) {
+      // 次の空きスロットを探す
+      let next = -1;
+      for (let i = idx + 1; i < 9; i++) { if (!lineup[i]) { next = i; break; } }
+      if (next === -1) { for (let i = 0; i < idx; i++) { if (!lineup[i]) { next = i; break; } } }
+      if (next >= 0) {
+        pickerCallback = { target: 'lineup', idx: next };
+        pickerSelected = [];
+        updatePickerUI();
+        renderPicker();
+        return;
+      }
+    }
+    closePicker();
+
+  } else if (target === 'bench') {
+    // 複数選択トグル
+    if (!player) return;
+    const key = player.n + ':' + player.name;
+    const existIdx = pickerSelected.findIndex(p => p.n + ':' + p.name === key);
+    if (existIdx >= 0) {
+      pickerSelected.splice(existIdx, 1);
+    } else {
+      pickerSelected.push(player);
+    }
+    updatePickerUI();
+    renderPicker();
+
+  } else if (target === 'relay') {
+    if (player) removeFromBench(player);
+    relay[idx].player = player;
+    closePicker();
+    renderAll();
+    autoSave();
+  }
+}
+
+function confirmPicker() {
+  if (!pickerCallback) return;
+  const { target } = pickerCallback;
+  if (target === 'bench' && pickerSelected.length > 0) {
+    pickerSelected.forEach(p => bench.push(p));
+  }
+  closePicker();
+  renderAll();
+  autoSave();
+}
+
+// ==========================================================
+//  手動追加
+// ==========================================================
+function openManualAdd() {
+  const name = prompt('名前を入力');
+  if (!name || !name.trim()) return;
+  const numStr = prompt('背番号を入力（なければ空欄）');
+  const n = numStr ? parseInt(numStr) || 0 : 0;
+  const player = { n, name: name.trim() };
+
+  if (pickerCallback) {
+    // ピッカーが開いていたらそこに追加
+    const { target, idx } = pickerCallback;
+    if (target === 'lineup') {
+      lineup[idx] = player;
+      closePicker();
+    } else if (target === 'bench') {
+      bench.push(player);
+      closePicker();
+    } else if (target === 'relay') {
+      relay[idx].player = player;
+      closePicker();
+    }
+  } else {
+    // 直接控えに追加
+    bench.push(player);
+  }
+  renderAll();
+  autoSave();
+}
+
+// ==========================================================
+//  フィールド描画
+// ==========================================================
+const FIELD = {
+  W: 600, H: 630,
+  home: [300, 560], first: [430, 420], second: [300, 310], third: [170, 420],
+  mound: [300, 430],
+};
+const DEF_POS = {
+  P: [300, 430], C: [300, 580],
+  '1B': [440, 410], '2B': [350, 330], '3B': [160, 410], SS: [220, 350],
+  LF: [130, 240], CF: [300, 180], RF: [470, 240],
+};
+
+function drawField() {
+  const canvas = document.getElementById('fieldCanvas');
+  if (!canvas) return;
+  const container = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  canvas.width = FIELD.W * dpr;
+  canvas.height = FIELD.H * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  const sx = FIELD.W / FIELD.W;
+
+  // 背景
+  ctx.fillStyle = '#3a8c3f';
+  ctx.fillRect(0, 0, FIELD.W, FIELD.H);
+
+  // 外野フェンスアーク
+  ctx.beginPath();
+  ctx.arc(300, 560, 400, Math.PI * 1.25, Math.PI * 1.75);
+  ctx.strokeStyle = 'rgba(255,255,255,.3)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // 外野芝（暗め）
+  ctx.beginPath();
+  ctx.arc(300, 560, 400, Math.PI * 1.25, Math.PI * 1.75);
+  ctx.fillStyle = '#34803a';
+  ctx.fill();
+
+  // 内野土
+  ctx.beginPath();
+  ctx.arc(300, 560, 200, Math.PI, 2 * Math.PI);
+  ctx.fillStyle = '#c4935a';
+  ctx.fill();
+
+  // 内野芝
+  const [hx, hy] = FIELD.home, [fx, fy] = FIELD.first, [sx2, sy2] = FIELD.second, [tx, ty] = FIELD.third;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy - 60);
+  ctx.lineTo(fx - 20, fy + 10);
+  ctx.lineTo(sx2, sy2 + 20);
+  ctx.lineTo(tx + 20, ty + 10);
+  ctx.closePath();
+  ctx.fillStyle = '#3a8c3f';
+  ctx.fill();
+
+  // ファウルライン
+  ctx.strokeStyle = 'rgba(255,255,255,.6)';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(300, 560); ctx.lineTo(0, 260); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(300, 560); ctx.lineTo(600, 260); ctx.stroke();
+
+  // ベースパス
+  ctx.strokeStyle = 'rgba(255,255,255,.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(hx, hy); ctx.lineTo(fx, fy); ctx.lineTo(sx2, sy2); ctx.lineTo(tx, ty); ctx.closePath();
+  ctx.stroke();
+
+  // マウンド
+  ctx.beginPath(); ctx.arc(300, 430, 14, 0, 2 * Math.PI);
+  ctx.fillStyle = '#b8844a'; ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillRect(296, 426, 8, 3);
+
+  // ベース
+  function drawBase(x, y, s) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#fff'; ctx.fillRect(-s / 2, -s / 2, s, s);
+    ctx.restore();
+  }
+  drawBase(fx, fy, 12);
+  drawBase(sx2, sy2, 12);
+  drawBase(tx, ty, 12);
+  // ホームベース
+  ctx.beginPath();
+  ctx.moveTo(300, 566); ctx.lineTo(308, 558); ctx.lineTo(308, 550);
+  ctx.lineTo(292, 550); ctx.lineTo(292, 558); ctx.closePath();
+  ctx.fillStyle = '#fff'; ctx.fill();
+
+  // 守備選手を描画
+  for (let i = 0; i < 9; i++) {
+    const player = lineup[i];
+    const posKey = POS_EN[lineupPos[i]];
+    const [px, py] = DEF_POS[posKey];
+    const color = POS_COLORS[posKey];
+
+    // 影
+    ctx.beginPath(); ctx.ellipse(px, py + 18, 16, 5, 0, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fill();
+
+    // 円
+    ctx.beginPath(); ctx.arc(px, py, 22, 0, 2 * Math.PI);
+    ctx.fillStyle = player ? color : 'rgba(255,255,255,.15)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
+    // テキスト
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    if (player) {
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText(POS_LIST[lineupPos[i]], px, py - 6);
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText(String(player.n), px, py + 8);
+      // 名前（下）
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,.9)';
+      const lastName = player.name.split(' ')[0] || player.name;
+      ctx.fillText(lastName, px, py + 36);
+    } else {
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillStyle = 'rgba(255,255,255,.4)';
+      ctx.fillText(POS_LIST[lineupPos[i]], px, py + 5);
+    }
+  }
+
+  // 打順番号バッジ
+  for (let i = 0; i < 9; i++) {
+    if (!lineup[i]) continue;
+    const posKey = POS_EN[lineupPos[i]];
+    const [px, py] = DEF_POS[posKey];
+    ctx.beginPath(); ctx.arc(px + 18, py - 16, 10, 0, 2 * Math.PI);
+    ctx.fillStyle = '#e94560'; ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(i + 1), px + 18, py - 16);
+    ctx.textBaseline = 'alphabetic';
+  }
+}
+
+// ==========================================================
+//  エクスポート
+// ==========================================================
+function exportLineup() {
+  const team = getTeam();
+  let text = `【${team.name}】スタメン\n`;
+  text += '─'.repeat(20) + '\n';
+  for (let i = 0; i < 9; i++) {
+    const p = lineup[i];
+    const pos = POS_LIST[lineupPos[i]];
+    if (p) {
+      text += `${i + 1}番 ${pos}  #${p.n} ${p.name}\n`;
+    } else {
+      text += `${i + 1}番 ${pos}  （未定）\n`;
+    }
+  }
+  if (bench.length) {
+    text += '\n【控え】\n';
+    bench.forEach(p => { text += `#${p.n} ${p.name}\n`; });
+  }
+  if (relay.some(r => r.player)) {
+    text += '\n【継投】\n';
+    relay.forEach(r => {
+      if (r.player) text += `${r.inning}回〜 #${r.player.n} ${r.player.name}\n`;
+    });
+  }
+
+  document.getElementById('exportText').value = text;
+  document.getElementById('exportPopup').classList.add('show');
+}
+
+function copyExport() {
+  const ta = document.getElementById('exportText');
+  ta.select();
+  navigator.clipboard.writeText(ta.value).then(() => {
+    alert('コピーしました');
+  });
+}
+
+function closeExport() {
+  document.getElementById('exportPopup').classList.remove('show');
+}
+
+// ==========================================================
+//  保存/読込
+// ==========================================================
+function autoSave() {
+  try {
+    const data = { currentTeamIdx, lineup, lineupPos, bench, relay };
+    localStorage.setItem(SK, JSON.stringify(data));
+  } catch(e) {}
+}
+
+function saveData() {
+  autoSave();
+  alert('保存しました');
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(SK);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.currentTeamIdx != null) {
+      currentTeamIdx = data.currentTeamIdx;
+      document.getElementById('teamSelect').value = currentTeamIdx;
+    }
+    if (data.lineup) lineup = data.lineup;
+    if (data.lineupPos) lineupPos = data.lineupPos;
+    if (data.bench) bench = data.bench;
+    if (data.relay) relay = data.relay;
+  } catch(e) {}
+}
+
+// ==========================================================
+//  ピッカーオーバーレイ背景クリックで閉じる
+// ==========================================================
+document.getElementById('pickerOverlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closePicker();
+});
+document.getElementById('exportPopup').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeExport();
+});
+
+// ==========================================================
+//  ドラッグ&ドロップ（タッチ+マウス対応）
+// ==========================================================
+let dragState = null; // { el, ghost, player, src, srcIdx }
+const DRAG_THRESHOLD = 8; // px — これ以上動かしたらドラッグ開始
+
+function getDragEl(target) {
+  return target.closest('[data-draggable]');
+}
+
+function createGhost(player) {
+  const g = document.createElement('div');
+  g.className = 'drag-ghost';
+  g.innerHTML = `<span class="num">${player.n}</span> ${player.name}`;
+  document.body.appendChild(g);
+  return g;
+}
+
+function moveGhost(ghost, x, y) {
+  ghost.style.left = x + 'px';
+  ghost.style.top = y + 'px';
+}
+
+function findDropTarget(x, y) {
+  // ghost は pointer-events:none なのでそのまま elementFromPoint で OK
+  const el = document.elementFromPoint(x, y);
+  if (!el) return null;
+  // lineup 行
+  const tr = el.closest('tr[data-drop="lineup"]');
+  if (tr) return { type: 'lineup', idx: +tr.dataset.dropIdx, el: tr };
+  // bench エリア
+  const ba = el.closest('[data-drop="bench"]');
+  if (ba) return { type: 'bench', el: ba };
+  return null;
+}
+
+function clearDropHighlights() {
+  document.querySelectorAll('.drop-hover').forEach(e => e.classList.remove('drop-hover'));
+}
+
+function handleDragEnd(x, y) {
+  if (!dragState) return;
+  const { ghost, player, src, srcIdx } = dragState;
+  const drop = findDropTarget(x, y);
+
+  if (drop) {
+    if (drop.type === 'lineup') {
+      const destIdx = drop.idx;
+      if (src === 'lineup') {
+        // オーダー内入れ替え
+        const other = lineup[destIdx];
+        lineup[destIdx] = player;
+        lineup[srcIdx] = other;
+      } else {
+        // bench/未選出 → lineup
+        if (src === 'bench') bench.splice(srcIdx, 1);
+        // 既にそこにいた選手は控えへ
+        if (lineup[destIdx]) bench.push(lineup[destIdx]);
+        removeFromBench(player);
+        lineup[destIdx] = player;
+      }
+    } else if (drop.type === 'bench') {
+      if (src === 'lineup') {
+        lineup[srcIdx] = null;
+        bench.push(player);
+      } else if (src === 'unselected') {
+        bench.push(player);
+      }
+      // bench→bench はなにもしない
+    }
+    renderAll();
+    autoSave();
+  }
+
+  ghost.remove();
+  clearDropHighlights();
+  dragState = null;
+}
+
+// --- タッチ ---
+let touchStartInfo = null;
+document.addEventListener('touchstart', e => {
+  const el = getDragEl(e.target);
+  if (!el) return;
+  const t = e.touches[0];
+  touchStartInfo = { el, x: t.clientX, y: t.clientY, started: false };
+}, { passive: true });
+
+document.addEventListener('touchmove', e => {
+  if (!touchStartInfo) return;
+  const t = e.touches[0];
+  const dx = t.clientX - touchStartInfo.x;
+  const dy = t.clientY - touchStartInfo.y;
+
+  if (!touchStartInfo.started) {
+    if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+    // ドラッグ開始
+    touchStartInfo.started = true;
+    const el = touchStartInfo.el;
+    const player = { n: +el.dataset.n, name: el.dataset.name };
+    const ghost = createGhost(player);
+    moveGhost(ghost, t.clientX, t.clientY);
+    dragState = { el, ghost, player, src: el.dataset.src, srcIdx: +el.dataset.srcIdx };
+    el.style.opacity = '.3';
+  }
+
+  if (dragState) {
+    e.preventDefault();
+    moveGhost(dragState.ghost, t.clientX, t.clientY);
+    clearDropHighlights();
+    const drop = findDropTarget(t.clientX, t.clientY);
+    if (drop) drop.el.classList.add('drop-hover');
+  }
+}, { passive: false });
+
+document.addEventListener('touchend', e => {
+  if (touchStartInfo && !touchStartInfo.started) {
+    // ドラッグにならなかった → 通常タップ
+    touchStartInfo = null;
+    return;
+  }
+  if (dragState) {
+    const t = e.changedTouches[0];
+    dragState.el.style.opacity = '';
+    handleDragEnd(t.clientX, t.clientY);
+  }
+  touchStartInfo = null;
+}, { passive: true });
+
+document.addEventListener('touchcancel', () => {
+  if (dragState) {
+    dragState.el.style.opacity = '';
+    dragState.ghost.remove();
+    clearDropHighlights();
+    dragState = null;
+  }
+  touchStartInfo = null;
+}, { passive: true });
+
+// --- マウス ---
+let mouseStartInfo = null;
+document.addEventListener('mousedown', e => {
+  if (e.button !== 0) return;
+  const el = getDragEl(e.target);
+  if (!el) return;
+  mouseStartInfo = { el, x: e.clientX, y: e.clientY, started: false };
+});
+
+document.addEventListener('mousemove', e => {
+  if (!mouseStartInfo) return;
+  const dx = e.clientX - mouseStartInfo.x;
+  const dy = e.clientY - mouseStartInfo.y;
+
+  if (!mouseStartInfo.started) {
+    if (Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+    mouseStartInfo.started = true;
+    const el = mouseStartInfo.el;
+    const player = { n: +el.dataset.n, name: el.dataset.name };
+    const ghost = createGhost(player);
+    moveGhost(ghost, e.clientX, e.clientY);
+    dragState = { el, ghost, player, src: el.dataset.src, srcIdx: +el.dataset.srcIdx };
+    el.style.opacity = '.3';
+  }
+
+  if (dragState) {
+    e.preventDefault();
+    moveGhost(dragState.ghost, e.clientX, e.clientY);
+    clearDropHighlights();
+    const drop = findDropTarget(e.clientX, e.clientY);
+    if (drop) drop.el.classList.add('drop-hover');
+  }
+});
+
+document.addEventListener('mouseup', e => {
+  if (mouseStartInfo && !mouseStartInfo.started) {
+    mouseStartInfo = null;
+    return;
+  }
+  if (dragState) {
+    dragState.el.style.opacity = '';
+    handleDragEnd(e.clientX, e.clientY);
+  }
+  mouseStartInfo = null;
+});
+
+window.addEventListener('load', init);
+window.addEventListener('resize', () => { if (document.getElementById('pageField').classList.contains('active')) drawField(); });
+</script>
+</body>
+</html>
