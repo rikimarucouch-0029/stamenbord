@@ -106,6 +106,30 @@ html, body {
 .field-page { display: flex; flex-direction: column; align-items: center; padding: 10px; overflow-y: auto !important; }
 .field-container { position: relative; width: 100%; max-width: 600px; aspect-ratio: 1/1.05; flex-shrink: 0; }
 .field-canvas { width: 100%; height: 100%; }
+/* フィールド上カード */
+.field-card {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 4px 6px; border-radius: 6px; min-width: 56px;
+  cursor: pointer; transition: box-shadow .1s;
+  text-align: center; z-index: 2;
+}
+.field-card:hover { box-shadow: 0 0 0 2px rgba(255,255,255,.5); }
+.field-card.empty { background: rgba(255,255,255,.12); border: 1.5px dashed rgba(255,255,255,.3); }
+.field-card.filled { background: rgba(0,0,0,.55); border: 1.5px solid rgba(255,255,255,.4); }
+.field-card .fc-pos { font-size: .6rem; font-weight: 700; color: rgba(255,255,255,.6); }
+.field-card .fc-order {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #e94560; color: #fff; font-size: .65rem; font-weight: 800;
+  cursor: pointer; position: absolute; top: -8px; left: -8px;
+}
+.field-card .fc-order select {
+  position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer;
+}
+.field-card .fc-num { font-size: .85rem; font-weight: 800; color: #ffd54f; line-height: 1.1; }
+.field-card .fc-name { font-size: .68rem; font-weight: 600; color: #fff; white-space: nowrap; line-height: 1.2; }
+.field-card.empty .fc-pos { color: rgba(255,255,255,.4); font-size: .72rem; }
 .field-players {
   width: 100%; max-width: 600px; padding: 8px 0;
 }
@@ -272,6 +296,7 @@ html, body {
     <div id="pageField" class="page field-page">
       <div class="field-container">
         <canvas id="fieldCanvas" class="field-canvas"></canvas>
+        <div id="fieldOverlay"></div>
       </div>
       <div class="field-players" id="fieldPlayers"></div>
     </div>
@@ -1057,62 +1082,64 @@ function drawField() {
   ctx.lineTo(292, 550); ctx.lineTo(292, 558); ctx.closePath();
   ctx.fillStyle = '#fff'; ctx.fill();
 
-  // 守備選手を描画
+  // ドロップ先ハイライト（キャンバス上）
+  if (fieldDropIdx >= 0) {
+    const posKey = POS_EN[lineupPos[fieldDropIdx]];
+    const [px, py] = DEF_POS[posKey];
+    ctx.beginPath(); ctx.arc(px, py, 38, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(76,175,80,.3)'; ctx.fill();
+    ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 3; ctx.stroke();
+  }
+
+  // HTMLカードを配置
+  renderFieldCards();
+}
+
+function renderFieldCards() {
+  const overlay = document.getElementById('fieldOverlay');
+  const container = document.querySelector('.field-container');
+  if (!overlay || !container) return;
+  const cw = container.clientWidth;
+  const ch = container.clientHeight;
+  const sx = cw / FIELD.W;
+  const sy = ch / FIELD.H;
+
+  let html = '';
   for (let i = 0; i < 9; i++) {
     const player = lineup[i];
     const posKey = POS_EN[lineupPos[i]];
     const [px, py] = DEF_POS[posKey];
-    const color = POS_COLORS[posKey];
+    const left = (px * sx).toFixed(1);
+    const top = (py * sy).toFixed(1);
 
-    // ドロップ先ハイライト
-    if (fieldDropIdx === i) {
-      ctx.beginPath(); ctx.arc(px, py, 32, 0, 2 * Math.PI);
-      ctx.fillStyle = 'rgba(76,175,80,.35)'; ctx.fill();
-      ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 3; ctx.stroke();
-    }
-
-    // 影
-    ctx.beginPath(); ctx.ellipse(px, py + 18, 16, 5, 0, 0, 2 * Math.PI);
-    ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.fill();
-
-    // 円
-    ctx.beginPath(); ctx.arc(px, py, 22, 0, 2 * Math.PI);
-    ctx.fillStyle = player ? color : 'rgba(255,255,255,.15)';
-    ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-
-    // テキスト
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
     if (player) {
-      ctx.font = 'bold 10px sans-serif';
-      ctx.fillText(POS_LIST[lineupPos[i]], px, py - 6);
-      ctx.font = 'bold 13px sans-serif';
-      ctx.fillText(String(player.n), px, py + 8);
-      // 名前（下）
-      ctx.font = 'bold 10px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,.9)';
-      const lastName = player.name.split(' ')[0] || player.name;
-      ctx.fillText(lastName, px, py + 36);
+      html += `<div class="field-card filled" style="left:${left}px;top:${top}px" onclick="openPickerFor('lineup',${i})" data-draggable data-src="lineup" data-src-idx="${i}" data-n="${player.n}" data-name="${player.name}">`;
+      // 打順バッジ（select付き）
+      html += `<span class="fc-order">${i+1}<select onchange="swapBatOrder(${i},+this.value);this.parentElement.blur()" onclick="event.stopPropagation()">`;
+      for (let j = 0; j < 9; j++) {
+        html += `<option value="${j}" ${j===i?'selected':''}>${j+1}</option>`;
+      }
+      html += '</select></span>';
+      html += `<span class="fc-pos">${POS_LIST[lineupPos[i]]}</span>`;
+      html += `<span class="fc-num">${player.n}</span>`;
+      html += `<span class="fc-name">${player.name}</span>`;
+      html += '</div>';
     } else {
-      ctx.font = 'bold 14px sans-serif';
-      ctx.fillStyle = 'rgba(255,255,255,.4)';
-      ctx.fillText(POS_LIST[lineupPos[i]], px, py + 5);
+      html += `<div class="field-card empty" style="left:${left}px;top:${top}px" onclick="openPickerFor('lineup',${i})">`;
+      html += `<span class="fc-pos">${POS_LIST[lineupPos[i]]}</span>`;
+      html += '</div>';
     }
   }
+  overlay.innerHTML = html;
+}
 
-  // 打順番号バッジ
-  for (let i = 0; i < 9; i++) {
-    if (!lineup[i]) continue;
-    const posKey = POS_EN[lineupPos[i]];
-    const [px, py] = DEF_POS[posKey];
-    ctx.beginPath(); ctx.arc(px + 18, py - 16, 10, 0, 2 * Math.PI);
-    ctx.fillStyle = '#e94560'; ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(String(i + 1), px + 18, py - 16);
-    ctx.textBaseline = 'alphabetic';
-  }
+function swapBatOrder(fromIdx, toIdx) {
+  if (fromIdx === toIdx) return;
+  // 打順入れ替え（選手とポジションをセットで）
+  const tmpP = lineup[fromIdx]; lineup[fromIdx] = lineup[toIdx]; lineup[toIdx] = tmpP;
+  const tmpPos = lineupPos[fromIdx]; lineupPos[fromIdx] = lineupPos[toIdx]; lineupPos[toIdx] = tmpPos;
+  renderAll();
+  autoSave();
 }
 
 // ==========================================================
@@ -1412,7 +1439,7 @@ document.addEventListener('mouseup', e => {
 });
 
 window.addEventListener('load', init);
-window.addEventListener('resize', () => { if (document.getElementById('pageField').classList.contains('active')) drawField(); });
+window.addEventListener('resize', () => { if (document.getElementById('pageField').classList.contains('active')) { drawField(); } });
 </script>
 </body>
 </html>
