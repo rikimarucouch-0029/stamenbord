@@ -103,13 +103,14 @@ html, body {
 .bench-chip .rm:hover { color: #ef5350; }
 
 /* ========== フィールド ========== */
-.field-page { display: flex; flex-direction: column; align-items: center; padding: 10px; }
-.field-container { position: relative; width: 100%; max-width: 400px; aspect-ratio: 1/1.05; }
+.field-page { display: flex; flex-direction: column; align-items: center; padding: 10px; overflow-y: auto !important; }
+.field-container { position: relative; width: 100%; max-width: 400px; aspect-ratio: 1/1.05; flex-shrink: 0; }
 .field-canvas { width: 100%; height: 100%; }
-.field-legend {
-  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
-  padding: 8px; font-size: .68rem; color: rgba(255,255,255,.6);
+.field-players {
+  width: 100%; max-width: 400px; padding: 8px 0;
 }
+.field-players .section-title { margin-top: 8px; }
+.field-players .bench-area { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0; }
 
 /* ========== 継投 ========== */
 .relay-page { padding: 10px; }
@@ -272,7 +273,7 @@ html, body {
       <div class="field-container">
         <canvas id="fieldCanvas" class="field-canvas"></canvas>
       </div>
-      <div class="field-legend" id="fieldLegend"></div>
+      <div class="field-players" id="fieldPlayers"></div>
     </div>
     <!-- 継投 -->
     <div id="pageRelay" class="page relay-page"></div>
@@ -545,6 +546,7 @@ function switchTab(name) {
 function renderAll() {
   renderOrder();
   renderRelay();
+  renderFieldPlayers();
   drawField();
 }
 
@@ -892,6 +894,74 @@ function openManualAdd() {
 }
 
 // ==========================================================
+//  フィールド：選手リスト描画
+// ==========================================================
+function renderFieldPlayers() {
+  const panel = document.getElementById('fieldPlayers');
+  if (!panel) return;
+  const used = usedPlayerKeys();
+  const team = getTeam();
+
+  let html = '';
+  // 控え
+  if (bench.length > 0) {
+    html += '<div class="section-title">控え選手</div>';
+    html += '<div class="bench-area">';
+    bench.forEach((p, i) => {
+      html += `<div class="bench-chip grade-${gradeOf(p.n)}" data-draggable data-src="bench" data-src-idx="${i}" data-n="${p.n}" data-name="${p.name}">`;
+      html += `<span class="num">${p.n}</span><span class="name">${p.name}</span>`;
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  // 未選出
+  const unselected = team.players.filter(p => !used.has(p.n + ':' + p.name));
+  if (unselected.length > 0) {
+    html += '<div class="section-title">未選出（' + unselected.length + '人）</div>';
+    html += '<div class="bench-area">';
+    unselected.forEach(p => {
+      html += `<div class="bench-chip grade-${gradeOf(p.n)}" data-draggable data-src="unselected" data-n="${p.n}" data-name="${p.name}" style="opacity:.7">`;
+      html += `<span class="num">${p.n}</span><span class="name">${p.name}</span>`;
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+  panel.innerHTML = html;
+}
+
+// ==========================================================
+//  フィールド：キャンバス座標変換＆ポジション判定
+// ==========================================================
+function canvasToField(clientX, clientY) {
+  const canvas = document.getElementById('fieldCanvas');
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  const x = (clientX - rect.left) / rect.width * FIELD.W;
+  const y = (clientY - rect.top) / rect.height * FIELD.H;
+  return { x, y };
+}
+
+function hitTestFieldPos(fx, fy) {
+  // 各ポジションの描画座標と比較して、最も近いものを返す
+  let bestIdx = -1, bestDist = 40; // 半径40px以内
+  for (let i = 0; i < 9; i++) {
+    const posKey = POS_EN[lineupPos[i]];
+    const [px, py] = DEF_POS[posKey];
+    const d = Math.sqrt((fx - px) ** 2 + (fy - py) ** 2);
+    if (d < bestDist) { bestDist = d; bestIdx = i; }
+  }
+  return bestIdx;
+}
+
+// キャンバスタップ → そのポジションのピッカーを開く
+function onFieldTap(clientX, clientY) {
+  const pt = canvasToField(clientX, clientY);
+  if (!pt) return;
+  const idx = hitTestFieldPos(pt.x, pt.y);
+  if (idx >= 0) openPickerFor('lineup', idx);
+}
+
+// ==========================================================
 //  フィールド描画
 // ==========================================================
 const FIELD = {
@@ -993,6 +1063,13 @@ function drawField() {
     const posKey = POS_EN[lineupPos[i]];
     const [px, py] = DEF_POS[posKey];
     const color = POS_COLORS[posKey];
+
+    // ドロップ先ハイライト
+    if (fieldDropIdx === i) {
+      ctx.beginPath(); ctx.arc(px, py, 32, 0, 2 * Math.PI);
+      ctx.fillStyle = 'rgba(76,175,80,.35)'; ctx.fill();
+      ctx.strokeStyle = '#4caf50'; ctx.lineWidth = 3; ctx.stroke();
+    }
 
     // 影
     ctx.beginPath(); ctx.ellipse(px, py + 18, 16, 5, 0, 0, 2 * Math.PI);
@@ -1145,6 +1222,8 @@ function moveGhost(ghost, x, y) {
   ghost.style.top = y + 'px';
 }
 
+let fieldDropIdx = -1; // フィールド上のハイライト中ポジション
+
 function findDropTarget(x, y) {
   // ghost は pointer-events:none なのでそのまま elementFromPoint で OK
   const el = document.elementFromPoint(x, y);
@@ -1155,7 +1234,24 @@ function findDropTarget(x, y) {
   // bench エリア
   const ba = el.closest('[data-drop="bench"]');
   if (ba) return { type: 'bench', el: ba };
+  // キャンバス上のポジション
+  const canvas = el.closest('#fieldCanvas');
+  if (canvas) {
+    const pt = canvasToField(x, y);
+    if (pt) {
+      const idx = hitTestFieldPos(pt.x, pt.y);
+      if (idx >= 0) return { type: 'lineup', idx, el: canvas, isField: true };
+    }
+  }
   return null;
+}
+
+function updateFieldHighlight(drop) {
+  const newIdx = (drop && drop.isField) ? drop.idx : -1;
+  if (newIdx !== fieldDropIdx) {
+    fieldDropIdx = newIdx;
+    drawField();
+  }
 }
 
 function clearDropHighlights() {
@@ -1198,6 +1294,7 @@ function handleDragEnd(x, y) {
 
   ghost.remove();
   clearDropHighlights();
+  fieldDropIdx = -1;
   dragState = null;
 }
 
@@ -1233,13 +1330,17 @@ document.addEventListener('touchmove', e => {
     moveGhost(dragState.ghost, t.clientX, t.clientY);
     clearDropHighlights();
     const drop = findDropTarget(t.clientX, t.clientY);
-    if (drop) drop.el.classList.add('drop-hover');
+    if (drop) { if (!drop.isField) drop.el.classList.add('drop-hover'); }
+    updateFieldHighlight(drop);
   }
 }, { passive: false });
 
 document.addEventListener('touchend', e => {
   if (touchStartInfo && !touchStartInfo.started) {
-    // ドラッグにならなかった → 通常タップ
+    // ドラッグにならなかった → キャンバスタップ判定
+    const t = e.changedTouches[0];
+    const el = document.elementFromPoint(t.clientX, t.clientY);
+    if (el && el.closest('#fieldCanvas')) onFieldTap(t.clientX, t.clientY);
     touchStartInfo = null;
     return;
   }
@@ -1291,12 +1392,15 @@ document.addEventListener('mousemove', e => {
     moveGhost(dragState.ghost, e.clientX, e.clientY);
     clearDropHighlights();
     const drop = findDropTarget(e.clientX, e.clientY);
-    if (drop) drop.el.classList.add('drop-hover');
+    if (drop) { if (!drop.isField) drop.el.classList.add('drop-hover'); }
+    updateFieldHighlight(drop);
   }
 });
 
 document.addEventListener('mouseup', e => {
   if (mouseStartInfo && !mouseStartInfo.started) {
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    if (el && el.closest('#fieldCanvas')) onFieldTap(e.clientX, e.clientY);
     mouseStartInfo = null;
     return;
   }
