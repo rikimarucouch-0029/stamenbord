@@ -564,7 +564,7 @@ function gradeOf(n) {
 // ==========================================================
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => {
-    const pages = ['order','field','relay'];
+    const pages = ['order','field'];
     t.classList.toggle('active', pages[i] === name);
   });
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -577,7 +577,6 @@ function switchTab(name) {
 // ==========================================================
 function renderAll() {
   renderOrder();
-  renderRelay();
   renderFieldPlayers();
   drawField();
 }
@@ -667,6 +666,7 @@ function removeBench(idx) {
 // ==========================================================
 function renderRelay() {
   const page = document.getElementById('pageRelay');
+  if (!page) return;
   let html = '<table class="relay-table"><thead><tr>';
   html += '<th>回</th><th>投手</th><th></th>';
   html += '</tr></thead><tbody>';
