@@ -31,6 +31,23 @@ html, body {
   min-height: 36px; transition: all .12s;
 }
 .toolbar select { max-width: 180px; }
+#dhToggle.dh { background: #e94560; border-color: #e94560; color: #fff; }
+#dhToggle.edh { background: #9c27b0; border-color: #9c27b0; color: #fff; }
+.dh-pitcher-section {
+  margin-top: 12px; padding: 10px; background: rgba(255,255,255,.06);
+  border-radius: 8px; border: 1.5px solid rgba(233,69,96,.4);
+}
+.dh-pitcher-section .section-label {
+  font-size: .72rem; font-weight: 700; color: #e94560; margin-bottom: 6px;
+}
+.dh-pitcher-cell {
+  display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+  border-radius: 6px; cursor: pointer; min-height: 38px; transition: background .1s;
+}
+.dh-pitcher-cell:hover { background: rgba(255,255,255,.1); }
+.dh-pitcher-cell .num { font-size: .85rem; font-weight: 800; color: #ffd54f; min-width: 24px; text-align: center; }
+.dh-pitcher-cell .name { font-size: .78rem; font-weight: 600; }
+.dh-pitcher-cell.empty { color: rgba(255,255,255,.3); font-size: .72rem; font-style: italic; }
 .toolbar select option { background: #16213e; color: #fff; }
 .toolbar button:active { transform: scale(.95); opacity: .8; }
 .toolbar .spacer { flex: 1; }
@@ -281,6 +298,7 @@ html, body {
     <span class="page-title">オーダー作成</span>
     <div class="spacer"></div>
     <select id="teamSelect" onchange="onTeamChange()"></select>
+    <button id="dhToggle" onclick="toggleDH()" style="font-size:.7rem">DH</button>
     <button onclick="exportLineup()">📋</button>
     <button onclick="saveData()">💾</button>
   </div>
@@ -473,12 +491,13 @@ const ROSTER = [
 // ==========================================================
 //  定数
 // ==========================================================
-const POS_LIST = ['投','捕','一','二','三','遊','左','中','右'];
-const POS_EN   = ['P','C','1B','2B','3B','SS','LF','CF','RF'];
+const POS_LIST = ['投','捕','一','二','三','遊','左','中','右','DH'];
+const POS_EN   = ['P','C','1B','2B','3B','SS','LF','CF','RF','DH'];
 const POS_COLORS = {
   P:'#1565C0', C:'#1565C0',
   '1B':'#2E7D32','2B':'#2E7D32','3B':'#2E7D32', SS:'#2E7D32',
-  LF:'#E65100', CF:'#E65100', RF:'#E65100'
+  LF:'#E65100', CF:'#E65100', RF:'#E65100',
+  DH:'#9C27B0'
 };
 const SK = 'lineup-maker-v1';
 
@@ -489,6 +508,8 @@ let allTeams = [];
 let currentTeamIdx = 0;
 // lineup[0..8] = { n, name } or null  (打順1~9)
 // lineupPos[0..8] = POS_EN index (0=P..8=RF)
+let dhMode = 'off'; // 'off' | 'dh' | 'edh'
+let dhPitcher = null; // DH制時の投手（守備のみ）
 let lineup = Array(9).fill(null);
 let lineupPos = [0,1,2,3,4,5,6,7,8]; // default
 let bench = []; // [{n, name}]
@@ -516,16 +537,65 @@ function onTeamChange() {
   const idx = +document.getElementById('teamSelect').value;
   if (idx !== currentTeamIdx) {
     currentTeamIdx = idx;
-    lineup = Array(9).fill(null);
-    lineupPos = [0,1,2,3,4,5,6,7,8];
+    const size = getLineupSize();
+    lineup = Array(size).fill(null);
+    lineupPos = dhMode === 'edh' ? [0,1,2,3,4,5,6,7,8,9] : [0,1,2,3,4,5,6,7,8];
+    if (dhMode === 'dh' && !lineupPos.includes(9)) lineupPos[8] = 9;
     bench = [];
     relay = [];
+    dhPitcher = null;
     renderAll();
   }
 }
 
 function getTeam() { return allTeams[currentTeamIdx]; }
 function getPlayers() { return getTeam().players; }
+function getLineupSize() { return dhMode === 'edh' ? 10 : 9; }
+
+function toggleDH() {
+  const btn = document.getElementById('dhToggle');
+  if (dhMode === 'off') {
+    dhMode = 'dh';
+    btn.textContent = 'DH';
+    btn.className = 'dh';
+    // 打順内に DH ポジションがなければ、投手ポジションの人を DH に変更
+    // まだ誰も DH でなければ最後の打順をDHにする
+    if (!lineupPos.includes(9)) {
+      // 投手ポジション(0)を持つ打順を探す
+      const pIdx = lineupPos.indexOf(0);
+      if (pIdx >= 0) {
+        // その打者のポジションをDHに変更
+        lineupPos[pIdx] = 9; // DH
+      } else {
+        lineupPos[8] = 9; // 最後をDH
+      }
+    }
+  } else if (dhMode === 'dh') {
+    dhMode = 'edh';
+    btn.textContent = 'EDH';
+    btn.className = 'edh';
+    // DH投手を控えへ
+    if (dhPitcher) { bench.push(dhPitcher); dhPitcher = null; }
+    // 9→10に拡張
+    if (lineup.length < 10) { lineup.push(null); lineupPos.push(9); }
+  } else {
+    dhMode = 'off';
+    btn.textContent = 'DH';
+    btn.className = '';
+    // DH投手を控えへ
+    if (dhPitcher) { bench.push(dhPitcher); dhPitcher = null; }
+    // 10→9に縮小：10番目の選手は控えへ
+    if (lineup.length > 9) {
+      const removed = lineup.pop();
+      lineupPos.pop();
+      if (removed) bench.push(removed);
+    }
+    // DHポジションを持っている人がいたら投手に変更
+    lineupPos = lineupPos.map(p => p === 9 ? 0 : p);
+  }
+  renderAll();
+  autoSave();
+}
 
 // 使用済み選手(lineup + bench + relay)
 function usedPlayerKeys() {
@@ -533,16 +603,18 @@ function usedPlayerKeys() {
   lineup.forEach(p => { if (p) keys.add(p.n + ':' + p.name); });
   bench.forEach(p => keys.add(p.n + ':' + p.name));
   relay.forEach(r => { if (r.player) keys.add(r.player.n + ':' + r.player.name); });
+  if (dhPitcher) keys.add(dhPitcher.n + ':' + dhPitcher.name);
   return keys;
 }
 // ピッカー用：選択先に応じて「選べない」選手を返す（控えは除外しない）
 function pickerUsedKeys(target) {
   const keys = new Set();
   lineup.forEach(p => { if (p) keys.add(p.n + ':' + p.name); });
-  if (target !== 'lineup' && target !== 'relay') {
+  if (target !== 'lineup' && target !== 'relay' && target !== 'dhPitcher') {
     bench.forEach(p => keys.add(p.n + ':' + p.name));
   }
   relay.forEach(r => { if (r.player) keys.add(r.player.n + ':' + r.player.name); });
+  if (dhPitcher && target !== 'dhPitcher') keys.add(dhPitcher.n + ':' + dhPitcher.name);
   return keys;
 }
 // 控えから該当選手を除去
@@ -589,7 +661,8 @@ function renderOrder() {
   html += '<th>打順</th><th>守備</th><th>選手</th><th></th>';
   html += '</tr></thead><tbody>';
 
-  for (let i = 0; i < 9; i++) {
+  const size = getLineupSize();
+  for (let i = 0; i < size; i++) {
     const p = lineup[i];
     const posIdx = lineupPos[i];
     html += `<tr data-drop="lineup" data-drop-idx="${i}">`;
@@ -613,6 +686,21 @@ function renderOrder() {
     html += '</tr>';
   }
   html += '</tbody></table>';
+
+  // DH制：投手（守備のみ）
+  if (dhMode === 'dh') {
+    html += '<div class="dh-pitcher-section">';
+    html += '<div class="section-label">投手（守備のみ・打席なし）</div>';
+    if (dhPitcher) {
+      html += `<div class="dh-pitcher-cell" onclick="openPickerFor('dhPitcher')">`;
+      html += `<span class="num">${dhPitcher.n}</span><span class="name">${dhPitcher.name}</span>`;
+      html += '</div>';
+      html += `<button class="remove-btn" style="margin-top:4px" onclick="removeDhPitcher()">× 解除</button>`;
+    } else {
+      html += `<div class="dh-pitcher-cell empty" onclick="openPickerFor('dhPitcher')">投手を選択...</div>`;
+    }
+    html += '</div>';
+  }
 
   // 控え
   html += '<div class="section-title">控え選手</div>';
@@ -657,6 +745,12 @@ function removeLineup(idx) {
 
 function removeBench(idx) {
   bench.splice(idx, 1);
+  renderAll();
+  autoSave();
+}
+
+function removeDhPitcher() {
+  dhPitcher = null;
   renderAll();
   autoSave();
 }
@@ -752,6 +846,9 @@ function updatePickerUI() {
   } else if (target === 'relay') {
     info.textContent = relay[idx].inning + '回〜';
     confirm.classList.remove('show');
+  } else if (target === 'dhPitcher') {
+    info.textContent = '投手（守備のみ）';
+    confirm.classList.remove('show');
   }
 }
 
@@ -767,8 +864,8 @@ function renderPicker() {
   const selKeys = new Set(pickerSelected.map(p => p.n + ':' + p.name));
 
   let html = '';
-  // lineup/relay は「空にする」を表示
-  if (target === 'lineup' || target === 'relay') {
+  // lineup/relay/dhPitcher は「空にする」を表示
+  if (target === 'lineup' || target === 'relay' || target === 'dhPitcher') {
     html += '<div class="picker-none" onclick="pickPlayer(null)">— 空にする —</div>';
   }
 
@@ -848,8 +945,9 @@ function pickPlayer(player) {
     renderAll();
     if (player) {
       // 次の空きスロットを探す
+      const sz = getLineupSize();
       let next = -1;
-      for (let i = idx + 1; i < 9; i++) { if (!lineup[i]) { next = i; break; } }
+      for (let i = idx + 1; i < sz; i++) { if (!lineup[i]) { next = i; break; } }
       if (next === -1) { for (let i = 0; i < idx; i++) { if (!lineup[i]) { next = i; break; } } }
       if (next >= 0) {
         pickerCallback = { target: 'lineup', idx: next };
@@ -877,6 +975,13 @@ function pickPlayer(player) {
   } else if (target === 'relay') {
     if (player) removeFromBench(player);
     relay[idx].player = player;
+    closePicker();
+    renderAll();
+    autoSave();
+
+  } else if (target === 'dhPitcher') {
+    if (player) removeFromBench(player);
+    dhPitcher = player;
     closePicker();
     renderAll();
     autoSave();
@@ -915,6 +1020,9 @@ function openManualAdd() {
       closePicker();
     } else if (target === 'relay') {
       relay[idx].player = player;
+      closePicker();
+    } else if (target === 'dhPitcher') {
+      dhPitcher = player;
       closePicker();
     }
   } else {
@@ -976,8 +1084,10 @@ function canvasToField(clientX, clientY) {
 function hitTestFieldPos(fx, fy) {
   // 各ポジションの描画座標と比較して、最も近いものを返す
   let bestIdx = -1, bestDist = 40; // 半径40px以内
-  for (let i = 0; i < 9; i++) {
+  const size = getLineupSize();
+  for (let i = 0; i < size; i++) {
     const posKey = POS_EN[lineupPos[i]];
+    if (posKey === 'DH') continue; // DHはフィールド上に無い
     const [px, py] = DEF_POS[posKey];
     const d = Math.sqrt((fx - px) ** 2 + (fy - py) ** 2);
     if (d < bestDist) { bestDist = d; bestIdx = i; }
@@ -1090,7 +1200,7 @@ function drawField() {
   ctx.fillStyle = '#fff'; ctx.fill();
 
   // ドロップ先ハイライト（キャンバス上）
-  if (fieldDropIdx >= 0) {
+  if (fieldDropIdx >= 0 && POS_EN[lineupPos[fieldDropIdx]] !== 'DH') {
     const posKey = POS_EN[lineupPos[fieldDropIdx]];
     const [px, py] = DEF_POS[posKey];
     ctx.beginPath(); ctx.arc(px, py, 38, 0, 2 * Math.PI);
@@ -1112,9 +1222,14 @@ function renderFieldCards() {
   const sy = ch / FIELD.H;
 
   let html = '';
-  for (let i = 0; i < 9; i++) {
+  const size = getLineupSize();
+  for (let i = 0; i < size; i++) {
     const player = lineup[i];
     const posKey = POS_EN[lineupPos[i]];
+    if (posKey === 'DH') {
+      // DH選手はフィールド上には表示しない
+      continue;
+    }
     const [px, py] = DEF_POS[posKey];
     const left = (px * sx).toFixed(1);
     const top = (py * sy).toFixed(1);
@@ -1123,7 +1238,7 @@ function renderFieldCards() {
       html += `<div class="field-card filled" style="left:${left}px;top:${top}px" onclick="openPickerFor('lineup',${i})" data-draggable data-src="lineup" data-src-idx="${i}" data-n="${player.n}" data-name="${player.name}">`;
       // 打順バッジ（select付き）
       html += `<span class="fc-order">${i+1}<select onchange="swapBatOrder(${i},+this.value);this.parentElement.blur()" onclick="event.stopPropagation()">`;
-      for (let j = 0; j < 9; j++) {
+      for (let j = 0; j < size; j++) {
         html += `<option value="${j}" ${j===i?'selected':''}>${j+1}</option>`;
       }
       html += '</select></span>';
@@ -1135,6 +1250,52 @@ function renderFieldCards() {
       html += `<div class="field-card empty" style="left:${left}px;top:${top}px" onclick="openPickerFor('lineup',${i})">`;
       html += `<span class="fc-pos">${POS_LIST[lineupPos[i]]}</span>`;
       html += '</div>';
+    }
+  }
+  // DHの打者をフィールド下部に表示
+  if (dhMode !== 'off') {
+    for (let i = 0; i < size; i++) {
+      if (POS_EN[lineupPos[i]] !== 'DH') continue;
+      const player = lineup[i];
+      const dhX = (80 * sx).toFixed(1);
+      const dhY = (580 * sy).toFixed(1);
+      if (player) {
+        html += `<div class="field-card filled" style="left:${dhX}px;top:${dhY}px" onclick="openPickerFor('lineup',${i})" data-draggable data-src="lineup" data-src-idx="${i}" data-n="${player.n}" data-name="${player.name}">`;
+        html += `<span class="fc-order">${i+1}<select onchange="swapBatOrder(${i},+this.value);this.parentElement.blur()" onclick="event.stopPropagation()">`;
+        for (let j = 0; j < size; j++) {
+          html += `<option value="${j}" ${j===i?'selected':''}>${j+1}</option>`;
+        }
+        html += '</select></span>';
+        html += `<span class="fc-pos">DH</span>`;
+        html += `<span class="fc-num">${player.n}</span>`;
+        html += `<span class="fc-name">${player.name}</span>`;
+        html += '</div>';
+      } else {
+        html += `<div class="field-card empty" style="left:${dhX}px;top:${dhY}px" onclick="openPickerFor('lineup',${i})">`;
+        html += `<span class="fc-pos">DH</span>`;
+        html += '</div>';
+      }
+    }
+  }
+  // DH制：投手（守備のみ）をマウンド位置に表示
+  if (dhMode === 'dh') {
+    // 打順内に投手ポジションが無い場合、dhPitcherをP位置に表示
+    const hasPInLineup = lineupPos.some((p, i) => POS_EN[p] === 'P' && i < size);
+    if (!hasPInLineup) {
+      const [ppx, ppy] = DEF_POS['P'];
+      const pLeft = (ppx * sx).toFixed(1);
+      const pTop = (ppy * sy).toFixed(1);
+      if (dhPitcher) {
+        html += `<div class="field-card filled" style="left:${pLeft}px;top:${pTop}px" onclick="openPickerFor('dhPitcher')">`;
+        html += `<span class="fc-pos" style="color:#e94560">投(DH)</span>`;
+        html += `<span class="fc-num">${dhPitcher.n}</span>`;
+        html += `<span class="fc-name">${dhPitcher.name}</span>`;
+        html += '</div>';
+      } else {
+        html += `<div class="field-card empty" style="left:${pLeft}px;top:${pTop}px" onclick="openPickerFor('dhPitcher')">`;
+        html += `<span class="fc-pos" style="color:#e94560">投(DH)</span>`;
+        html += '</div>';
+      }
     }
   }
   overlay.innerHTML = html;
@@ -1154,9 +1315,10 @@ function swapBatOrder(fromIdx, toIdx) {
 // ==========================================================
 function exportLineup() {
   const team = getTeam();
-  let text = `【${team.name}】スタメン\n`;
+  let text = `【${team.name}】スタメン${dhMode === 'dh' ? '（DH制）' : dhMode === 'edh' ? '（EDH制）' : ''}\n`;
   text += '─'.repeat(20) + '\n';
-  for (let i = 0; i < 9; i++) {
+  const size = getLineupSize();
+  for (let i = 0; i < size; i++) {
     const p = lineup[i];
     const pos = POS_LIST[lineupPos[i]];
     if (p) {
@@ -1164,6 +1326,9 @@ function exportLineup() {
     } else {
       text += `${i + 1}番 ${pos}  （未定）\n`;
     }
+  }
+  if (dhMode === 'dh' && dhPitcher) {
+    text += `投手（守備のみ）  #${dhPitcher.n} ${dhPitcher.name}\n`;
   }
   if (bench.length) {
     text += '\n【控え】\n';
@@ -1197,7 +1362,7 @@ function closeExport() {
 // ==========================================================
 function autoSave() {
   try {
-    const data = { currentTeamIdx, lineup, lineupPos, bench, relay };
+    const data = { currentTeamIdx, lineup, lineupPos, bench, relay, dhMode, dhPitcher };
     localStorage.setItem(SK, JSON.stringify(data));
   } catch(e) {}
 }
@@ -1216,6 +1381,16 @@ function loadData() {
       currentTeamIdx = data.currentTeamIdx;
       document.getElementById('teamSelect').value = currentTeamIdx;
     }
+    if (data.dhMode != null) {
+      // 旧形式(true/false)との互換
+      if (data.dhMode === true) dhMode = 'edh';
+      else if (data.dhMode === false) dhMode = 'off';
+      else dhMode = data.dhMode;
+      const btn = document.getElementById('dhToggle');
+      btn.className = dhMode === 'dh' ? 'dh' : dhMode === 'edh' ? 'edh' : '';
+      btn.textContent = dhMode === 'edh' ? 'EDH' : 'DH';
+    }
+    if (data.dhPitcher != null) dhPitcher = data.dhPitcher;
     if (data.lineup) lineup = data.lineup;
     if (data.lineupPos) lineupPos = data.lineupPos;
     if (data.bench) bench = data.bench;
